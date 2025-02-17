@@ -1,8 +1,53 @@
+
+class FlowBox {	
+    constructor(boxId) {
+		let boxElm = document.getElementById(boxId);
+		this.svg = SVG().addTo(boxElm).size('100%', '100%');
+		
+		this.startNode = null;
+		
+		this.nodes = [];
+		this.lines = [];
+    }
+
+	addNode(optJson) {
+		//this.nodeCount++;
+		if (optJson.id == null)
+			optJson.id = (this.nodes.length + 1) * (-1);
+		let node = new FlowNode(this, optJson);
+		this.nodes.push(node);
+		return node;
+	}
+	
+	addLine(fromNode, toNode, id, lineType) {
+		//this.lineCount++;
+		if (id == null)
+			id = (this.lines.length + 1) * (-1);
+		return new FlowLine(this, fromNode, toNode, id, lineType);
+	}
+	
+	drawLineStart(startNode) {
+		this.startNode = startNode;
+	}
+	
+	drawLineEnd(endNode) {
+		new FlowLine(this, this.startNode, endNode);
+		this.startNode = null;
+	}
+	
+	findNode(id) {
+		//elm2.node 指向dom
+		return this.nodes.find(node => node.elm2.node.dataset.id == id);
+	}
+}
+
 class FlowNode {
 	/**
-	 optJson: option json
+	 self: this
+	 flowBox: FlowBox object
 	 svg: svg
-	 elm: node element
+	 optJson: option json
+	 elm2: svg element 與 html element不同
 	 textElm: node text element
 	 lines: 進入/離開此節點的流程線
 	*/
@@ -18,8 +63,10 @@ class FlowNode {
 	DragStart = 'dragstart';
 	DragEnd = 'dragend';
 
-    constructor(svg, optJson) {
-        this.svg = svg;
+    constructor(flowBox, optJson) {
+		this.self = this;
+		this.flowBox = flowBox;
+        this.svg = flowBox.svg;
         this.optJson = Object.assign({
             nodeType: this.TypeNode,
             x: 50,
@@ -66,14 +113,14 @@ class FlowNode {
             }
 
 			//circle大小為0, 在css設定, 這時radius還沒確定, 不能move(會用到radius)
-            this.elm = this.svg.circle()
+            this.elm2 = this.svg.circle()
                 .addClass(cssClass);
-
+				
 			//移動circle時會參考radius, 所以先更新, 從css讀取radius, 而不是從circle建立的屬性 !!
-            let style = window.getComputedStyle(this.elm.node);	//不能直接讀取circle屬性
+            let style = window.getComputedStyle(this.elm2.node);	//不能直接讀取circle屬性
             let radius = parseFloat(style.getPropertyValue("r"));	//轉浮點
-            this.elm.attr("r", radius);
-            this.elm.move(this.optJson.x, this.optJson.y);
+            this.elm2.attr("r", radius);
+            this.elm2.move(this.optJson.x, this.optJson.y);
 			
 			let width = radius * 2;
             this.optJson.width = width;		//寫入width, 供後面計算位置
@@ -81,10 +128,13 @@ class FlowNode {
         } else {
             nodeName = this.optJson.text;
             cssClass = 'xf-node';
-            this.elm = this.svg.rect(this.optJson.width, this.optJson.height)
+            this.elm2 = this.svg.rect(this.optJson.width, this.optJson.height)
                 .addClass(cssClass)
                 .move(this.optJson.x, this.optJson.y);
         }
+
+		//set node id
+		this.elm2.node.dataset.id = this.optJson.id;
 
 		//節點文字
         this.textElm = this.svg.text(nodeName)
@@ -92,8 +142,10 @@ class FlowNode {
             .font({ anchor: 'middle' });
 
         //連接點 connector(在文字右側), 小方塊
-		if (nodeType != this.TypeEnd)
+		if (nodeType != this.TypeEnd){
 			this.connectorElm = this.svg.rect(12, 12).addClass('xf-connector');
+			this.connectorElm.node.dataset.nodeElm = this.elm2;
+		}
 		
         this._render();
     }
@@ -106,8 +158,8 @@ class FlowNode {
 	//繪製, 移動子元件
     _render() {
         let bbox = this.textElm.bbox();
-		let centerX = this.elm.x() + this.optJson.width / 2;
-		let centerY = this.elm.y() + this.optJson.height / 2;
+		let centerX = this.elm2.x() + this.optJson.width / 2;
+		let centerY = this.elm2.y() + this.optJson.height / 2;
 
 		//文字
         this.textElm.move(centerX - bbox.width / 2, centerY - bbox.height / 2);
@@ -118,14 +170,16 @@ class FlowNode {
     }
 
 	_setNodeDraggable() {
-		this.elm.draggable().on(this.DragMove, () => {
+		this.elm2.draggable().on(this.DragMove, () => {
 			this._render();
 			this.lines.forEach(line => line.render());
-			
+		
+		/*
 		//todo: temp add
 		}).on(this.DragEnd, (event) => {	
 			let { x, y } = event.detail.box;
 			console.log(`x=${x}, y=${y}`);
+		*/
 		});
 	}
 
@@ -133,20 +187,22 @@ class FlowNode {
 		if (!this.connectorElm)
 			return;
 		
-		let startX, startY;
+		let startElm2, startX, startY;
 		let tempLine;
-		let overNode = null;
+		let endElm2 = null;
 
-		// 啟用 connectorElm 的拖拽功能
+		// 啟用 connectorElm 的拖拽功能, 使用箭頭函數時 this 會指向類別實例 !!, 使用 function則會指向 connectorElm !!
 		this.connectorElm.draggable().on(this.DragStart, (event) => {
 			// 初始化線條
-			let { x, y } = this.connectorElm.rbox(this.svg); // 使用 SVG 畫布的座標系
+			let { x, y } = this.connectorElm.rbox(this.svg); // 使用SVG畫布的座標系
 			startX = x;
 			startY = y;
+			startElm2 = this.self.elm2;
 
 			tempLine = this.svg.line(startX, startY, startX, startY)
-				.stroke({ width: 2, color: '#000' })
-				.addClass('xf-line');
+				.addClass('xf-line off');
+				
+			this.flowBox.drawLineStart(this.self);
 				
 		}).on(this.DragMove, (event) => {
 			//阻止 connector 移動
@@ -162,63 +218,46 @@ class FlowNode {
 
 			// 檢查座標值是否有效
 			if (isFinite(endX) && isFinite(endY)) {
-				// 將 SVG 座標轉換為視口座標
+				// 將 SVG 座標轉換為檢視座標
 				let svgRect = this.svg.node.getBoundingClientRect();
-				let viewportX = endX + svgRect.x;
-				let viewportY = endY + svgRect.y;
+				let viewPortX = endX + svgRect.x;
+				let viewPortY = endY + svgRect.y;
 
 				// 檢查是否懸停在節點上
-				let elements = document.elementsFromPoint(viewportX, viewportY);
-				let nodeHovered = elements.find(elm => elm.classList.contains('xf-node') || elm.classList.contains('xf-end'));
-
-				if (nodeHovered) {
-					if (overNode !== nodeHovered) {
-						if (overNode) overNode.style.stroke = '#000';
-						overNode = nodeHovered;
-						overNode.style.stroke = 'blue';
+				let overNode = document.elementsFromPoint(viewPortX, viewPortY)
+					.find(elm => elm != startElm2 && (elm.classList.contains('xf-node') || elm.classList.contains('xf-end')));
+				if (overNode) {
+					if (endElm2 !== overNode) {
+						if (endElm2) 
+							this._highlightNode(endElm2, false);
+						endElm2 = overNode;
+						this._highlightNode(endElm2, true);
 					}
-				} else if (overNode) {
-					overNode.style.stroke = '#000';
-					overNode = null;
+				} else if (endElm2) {
+					this._highlightNode(endElm2, false);
+					endElm2 = null;
 				}
 			}
 			
 		}).on(this.DragEnd, (event) => {
-			// 獲取拖拽的目標座標（相對於 SVG 畫布）
-			let { x, y } = event.detail.box;
-			let endX = x;
-			let endY = y;
-
 			// 檢查座標值是否有效
-			if (isFinite(endX) && isFinite(endY)) {
-				// 將 SVG 座標轉換為視口座標
-				let svgRect = this.svg.node.getBoundingClientRect();
-				let viewportX = endX + svgRect.x;
-				let viewportY = endY + svgRect.y;
-
-				// 檢查是否拖放到節點上
-				let elements = document.elementsFromPoint(viewportX, viewportY);
-				let dropNode = elements.find(elm => elm.classList.contains('xf-node') || elm.classList.contains('xf-end'));
-
-				if (dropNode) {
-					// 如果拖放到節點上，保留線條並連接到目標節點
-					let dropBBox = dropNode.getBoundingClientRect();
-					let dropCenterX = dropBBox.x + dropBBox.width / 2 - svgRect.x;
-					let dropCenterY = dropBBox.y + dropBBox.height / 2 - svgRect.y;
-
-					tempLine.plot(startX, startY, dropCenterX, dropCenterY);
-				} else {
-					// 如果沒有拖放到節點上，移除線條
-					tempLine.remove();
-				}
-
-				if (overNode) {
-					overNode.style.stroke = '#000';
-					overNode = null;
-				}
+			if (endElm2) {
+				this._highlightNode(endElm2, false);					
+				this.flowBox.drawLineEnd(this.flowBox.findNode(endElm2.dataset.id));
+				endElm2 = null;
 			}
+			tempLine.remove();
 		});
 	}
+	
+	_highlightNode(node, status){
+		if (status){
+			node.classList.add('on');
+		} else {
+			node.classList.remove('on');
+		}
+	}
+	
 }//class FlowNode
 
 
@@ -238,8 +277,9 @@ class FlowLine {
     TypeH = 'H';	//水平(左右)
 
 	/**
+	 flowBox: FlowBox object
 	 svg: svg
-	 path: svg.path
+	 path: line path
 	 fromNode: from node
 	 toNode: to node
 	 lineType: 起點位置, A(auto),U(上下),L(左右)
@@ -247,8 +287,9 @@ class FlowLine {
 	 isTypeV:
 	 isTypeH:
 	*/
-	constructor(svg, fromNode, toNode, lineType) {
-        this.svg = svg;
+	constructor(flowBox, fromNode, toNode, lineType) {
+		this.flowBox = flowBox;
+        this.svg = flowBox.svg;
         this.fromNode = fromNode;
         this.toNode = toNode;
 		this.path = this.svg.path('').addClass('xf-line');
@@ -279,8 +320,8 @@ class FlowLine {
 
 		//=== from Node ===
 		// 位置和尺寸, x/y為左上方座標
-		const fromX = this.fromNode.elm.x();	
-		const fromY = this.fromNode.elm.y();
+		const fromX = this.fromNode.elm2.x();	
+		const fromY = this.fromNode.elm2.y();
 		const fromWidth = this.fromNode.optJson.width;
 		const fromHeight = this.fromNode.optJson.height;
 		const fromCntX = fromX + fromWidth / 2;		//中心點
@@ -292,8 +333,8 @@ class FlowLine {
 		const fromRight = { x: fromX + fromWidth, y: fromY + fromHeight / 2 };
 
 		//=== to Node ===
-		const toX = this.toNode.elm.x();
-		const toY = this.toNode.elm.y();
+		const toX = this.toNode.elm2.x();
+		const toY = this.toNode.elm2.y();
 		const toWidth = this.toNode.optJson.width;
 		const toHeight = this.toNode.optJson.height;
 		const toCntX = toX + toWidth / 2;

@@ -17,6 +17,10 @@
 	stroke: #FD88BF;
 	stroke-width: 1px;
 }
+.xf-end.on {
+	stroke: blue;
+	stroke-width: 3px;
+}
 .xf-end-text {
     fill: black;	
 }
@@ -28,6 +32,10 @@
 	stroke-width: 1px;
 	rx: 5px; /* 水平圓角半徑 */
     ry: 5px; /* 垂直圓角半徑 */	
+}
+.xf-node.on {
+	stroke: blue;
+	stroke-width: 3px;
 }
 .xf-node-text {
     fill: black;	
@@ -55,7 +63,11 @@
 	fill: none;
 	stroke: #898484;
 	stroke-width: 2px;
-	stroke-linejoin: round;
+	/*stroke-linejoin: round;*/
+}
+/* temp line 或無迄點 */
+.xf-line.off {
+	stroke: red;
 }
 
 /* 流程線末端箭頭 */

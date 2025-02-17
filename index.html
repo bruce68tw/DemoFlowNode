@@ -4,10 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SVG.js Flowchart</title>
-    <link href="FlowNodeList.css" rel="stylesheet" />
+    <link href="FlowItems.css" rel="stylesheet" />
     <script src="svg-3.1.2.min.js"></script>
 	<script src="svg.draggable-3.0.0.min.js"></script>	
-    <script src="FlowNodeList.js"></script>
+    <script src="FlowItems.js"></script>
     <style>
         #flowBox {
             width: 100%;
@@ -20,16 +20,14 @@
     <div id="flowBox"></div>
     
     <script>
-		document.addEventListener("DOMContentLoaded", () => {		
-			let boxElm = document.getElementById('flowBox');
-            let svg = SVG().addTo(boxElm).size('100%', '100%');
-            
-            let start = new FlowNode(svg, {
+		document.addEventListener("DOMContentLoaded", () => {			
+            let flow = new FlowBox('flowBox');
+            let start = flow.addNode({
                 nodeType: 'S',
                 x: 200,
                 y: 100,
             });
-            let node1 = new FlowNode(svg, {
+            let node1 = flow.addNode({
                 nodeType: 'N',
                 x: 200,
                 y: 200,
@@ -37,7 +35,7 @@
                 height: 50,
                 text: 'Node1',
             });
-            let node2 = new FlowNode(svg, {
+            let node2 = flow.addNode({
                 nodeType: 'N',
                 x: 200,
                 y: 300,
@@ -45,14 +43,16 @@
                 height: 50,
                 text: 'Node2',
             });            
-            let end = new FlowNode(svg, {
+            let end = flow.addNode({
                 nodeType: 'E',
                 x: 200,
                 y: 400,
             });
-			new FlowLine(svg, start, node1);
-			new FlowLine(svg, node1, node2);
-			new FlowLine(svg, node2, end);
+			/*
+			*/
+			flow.addLine(start, node1);
+			flow.addLine(node1, node2);
+			flow.addLine(node2, end);
         });
     </script>
 </body>
